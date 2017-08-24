@@ -23,8 +23,6 @@ def parse_results():
     risposta['data_size'] = data_size
     data_size_converted = int(data_size, 16)
 
-    # header_checksum = ser.read().encode("hex")
-
     data = ser.read(data_size_converted)
     risposta['data'] = data
 
@@ -65,11 +63,17 @@ def send_command(parameters):
         body_checksum = 0
         # parse data array
         while ii < data_length:
-            valore_assoluto = parameters['data'][ii]
-            if (parameters['data'][ii] < 0):
-                parameters['data'][ii] = 256 + parameters['data'][ii]
 
-            parametro_convertito = chr(parameters['data'][ii] % 256).encode("hex")
+            if parameters['data_format'] == "dec":
+                valore_assoluto = parameters['data'][ii]
+                if (parameters['data'][ii] < 0):
+                    parameters['data'][ii] = 256 + parameters['data'][ii]
+
+                parametro_convertito = chr(parameters['data'][ii] % 256).encode("hex")
+
+            else:
+                valore_assoluto = int(parameters['data'][ii], 16)
+                parametro_convertito = parameters['data'][ii]
 
             # print parametro_convertito
             data_hex += parametro_convertito
@@ -104,7 +108,6 @@ def send_command(parameters):
                 beginning_hex + command_id_hex + data_length_hex +
                 header_checksum_hex + data_hex+body_checksum_hex
                 )
-    # ser.write(comando)
 
     # visualizza a schermo la stringa raw
     print "String sent: "+to_hex(comando)
@@ -136,19 +139,19 @@ CMD_READ_PARAMS['id'] = 82
 CMD_READ_PARAMS['data'] = ["01"]
 CMD_READ_PARAMS['wait_response'] = True
 CMD_READ_PARAMS['wait_response_timeout'] = 0.5
+CMD_READ_PARAMS['data_format'] = "hex"
 
 CMD_BEEP_SOUND = {}
 CMD_BEEP_SOUND['id'] = 89
 CMD_BEEP_SOUND['data'] = [ "80", "00", "7D", "00", "00", "00", "00", "00", "00", "00", "00", "00", "B8", "0B"]
-CMD_BEEP_SOUND['data_format'] = "dec"
+CMD_BEEP_SOUND['data_format'] = "hex"
 
 CMD_CONTROL = {}
 CMD_CONTROL['id'] = 67
 # CMD_CONTROL['data'] = [ "01", "00", "d8", "00", "48", "00", "00", "00", "00", "00", "00", "00", "00" ]
-CMD_CONTROL['data'] = [ 67,67,67, 0,2,0,2, 0,2,0,2, 0,2,0,2 ]
+# CMD_CONTROL['data'] = [ 67,67,67, 0,2,0,2, 0,2,0,2, 0,2,0,2 ]
 CMD_CONTROL['data'] = [ 67,67,67, 0,0,0,8, 0,0,0,0, 0,0,0,0, ]
-CMD_CONTROL['data'] = [ 1,1,1, 0,0,0,0, 0,0,0,0, 0,0,0,0, ]
-# CMD_CONTROL['data_format'] = "hex"
+CMD_CONTROL['data_format'] = "dec"
 CMD_CONTROL['wait_response'] = True
 CMD_CONTROL['wait_response_timeout'] = 0.5
 
@@ -189,17 +192,9 @@ ser.baudrate = 115200
 
 send_command(CMD_MOTORS_ON)
 time.sleep(1)
-# send_command(CMD_EXECUTE_MENU)
+# send_command(CMD_CONTROL)
 send_command(CMD_RESET)
 time.sleep(5)
 
 print "Device ready to work!"
-# send_command(CMD_CONTROL)
-# send_command(CMD_EXECUTE_MENU)
-# send_command(CMD_CONTROL)
-# time.sleep(10)
-# send_command(CMD_EXECUTE_MENU)
-# time.sleep(2)
-# send_command(CMD_MOTORS_OFF)
-
 print ""
