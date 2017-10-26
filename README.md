@@ -12,7 +12,7 @@ my_command = Command(id, description, wait_reponse, wait_response_timeout, data,
 send_command(my_command)
 ```
 where:  
-- id: command id, as specified by official documentation  
+- id: command id, as specified in official documentation  
 - description: short custom description  
 - wait_response: to be used when waiting for an answer from the Gimbal (boolean)  
 - wait_response_timeout: specify a timeout for the answer (used only if wait_response is True)
