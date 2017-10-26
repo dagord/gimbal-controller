@@ -182,7 +182,7 @@ while usb < 100 and usb >= 0:
 
 if connected == 0:
     print "Device not connected or not available!"
-    print "(are you running script as superser?)"
+    print "(are you running script as superuser?)"
     print
     sys.exit()
 else:
