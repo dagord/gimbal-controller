@@ -1,6 +1,27 @@
-# coding=utf-8
-
-# script must be execute as superuser in order to access USB port
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+#
+#  gimbal.py
+#
+#  Copyright 2017 Matteo D'Agord <matteo.dagord@gmail.com>
+#
+#  This program is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation; either version 2 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
+# WARNING:
+# the script must be execute as superuser in order to access USB port!
 
 import serial
 import time
@@ -13,48 +34,48 @@ def to_hex(text_string):
 
 
 def parse_results():
-    risposta = {}
+    results = {}
     ser.read()
 
     command_id = ser.read().encode("hex")
-    risposta['command_id'] = int(command_id, 16)
+    results['command_id'] = int(command_id, 16)
 
     data_size = ser.read().encode("hex")
-    risposta['data_size'] = data_size
+    results['data_size'] = data_size
     data_size_converted = int(data_size, 16)
 
     data = ser.read(data_size_converted)
-    risposta['data'] = data
+    results['data'] = data
 
     body_checksum = ser.read().encode("hex")
-    risposta['body_checksum'] = body_checksum
+    results['body_checksum'] = body_checksum
 
     decoded_data = array.array("b", data)
-    risposta['decoded_data'] = decoded_data
-    return risposta
+    results['decoded_data'] = decoded_data
+    return results
 
 
-def send_command(parameters):
+def send_command(command):
     beginning_hex = '\x3E'
-    command_id_hex = chr(parameters['id'])
+    command_id_hex = chr(command.id)
 
     # show command id
-    print "Command id: " + str(parameters['id'])
+    print "Command id: %s" % command.id
 
     # send beginning characher
     ser.write(beginning_hex)
     # send command id
-    ser.write(command_id_hex)
+    ser.write(chr(command.id))
 
     # check if command has data
-    if 'data' in parameters:
+    if command.data:
         # calculate and send data array length
-        data_length = len(parameters['data'])
+        data_length = len(command.data)
         data_length_hex = chr(data_length)
         ser.write(data_length_hex)
 
         # calculate and send header checksum
-        header_checksum = parameters['id'] + data_length
+        header_checksum = command.id + data_length
         header_checksum_hex = chr(header_checksum % 256)
         ser.write(header_checksum_hex)
 
@@ -64,27 +85,26 @@ def send_command(parameters):
         # parse data array
         while ii < data_length:
 
-            if parameters['data_format'] == "dec":
-                valore_assoluto = parameters['data'][ii]
-                if (parameters['data'][ii] < 0):
-                    parameters['data'][ii] = 256 + parameters['data'][ii]
+            if command.data_format == "dec":
+                absolute_value = command.data[ii]
+                if (command.data[ii] < 0):
+                    command.data[ii] = 256 + command.data[ii]
 
-                parametro_convertito = chr(parameters['data'][ii] % 256).encode("hex")
+                converted_parameter = chr(command.data[ii] % 256).encode("hex")
 
             else:
-                valore_assoluto = int(parameters['data'][ii], 16)
-                parametro_convertito = parameters['data'][ii]
+                absolute_value = int(command.data[ii], 16)
+                converted_parameter = command.data[ii]
 
-            # print parametro_convertito
-            data_hex += parametro_convertito
+            data_hex += converted_parameter
             # increases body checksum
-            body_checksum += int(valore_assoluto)
+            body_checksum += int(absolute_value)
             ii += 1
 
         # send bytearray
-        print "Data: "+str(data_hex)
+        print "Data: %s" % data_hex
         ser.write(bytearray.fromhex(data_hex))
-        print "Total bytes: "+str(body_checksum)
+        print "Total bytes: %s" % body_checksum
         body_checksum_hex = chr(body_checksum % 256)
 
     else:
@@ -94,7 +114,7 @@ def send_command(parameters):
         body_checksum_hex = data_hex
         data_length_hex = chr(data_length)
         ser.write(data_length_hex)
-        header_checksum = parameters['id'] + data_length
+        header_checksum = command.id + data_length
         header_checksum_hex = chr(header_checksum % 256)
         ser.write(header_checksum_hex)
         ser.write(data_hex)
@@ -103,98 +123,77 @@ def send_command(parameters):
     # send body checksum
     ser.write(body_checksum_hex)
 
-    # compone e invia il comando
-    comando = (
+    # print composed command on screen
+    command_to_send = (
                 beginning_hex + command_id_hex + data_length_hex +
                 header_checksum_hex + data_hex+body_checksum_hex
                 )
+    print "String sent: %s" % command_to_send
 
-    # visualizza a schermo la stringa raw
-    print "String sent: "+to_hex(comando)
-
-    if 'wait_response' in parameters:
+    if command.wait_response:
         print "----------------------"
         print "Waiting response..."
-        time.sleep(parameters['wait_response_timeout'])
-        risposta = parse_results()
-        print "Command id: "+str(risposta['command_id'])
-        print "Data "+str(risposta['decoded_data'])
+        time.sleep(command.wait_response_timeout)
+        results = parse_results()
+        print "Command id: s%" % results['command_id']
+        print "Data s%" % results['decoded_data']
 
     print
 
 
-CMD_MOTORS_ON = {}
-CMD_MOTORS_ON['id'] = 77
+class Command(object):
 
-CMD_MOTORS_OFF = {}
-CMD_MOTORS_OFF['id'] = 109
+    def __init__(self, id, description, wait_response=False,
+                 wait_response_timeout=0.5, data=None, data_format="hex"):
+        self.id = id
+        self.description = description
+        self.wait_response = wait_response
+        self.wait_response_timeout = wait_response_timeout
+        self.data = data
+        self.data_format = data_format
 
-CMD_BOARD_INFO = {}
-CMD_BOARD_INFO['id'] = 86
-CMD_BOARD_INFO['wait_response'] = True
-CMD_BOARD_INFO['wait_response_timeout'] = 0.5
+command_motors_on = Command(77, "CMD_MOTORS_ON")
+command_motors_off = Command(109, "CMD_MOTORS_OFF")
+command_board_info = Command(109, "CMD_BOARD_INFO", True, 0.5)
+command_read_params = Command(82, "CMD_READ_PARAMS", True, 0.5, ["01"])
+command_beep_sound = Command(89, "CMD_BEEP_SOUND", False, 0,
+                             ["80", "00", "7D", "00", "00", "00",
+                              "00", "00", "00", "00", "00", "00", "B8", "0B"])
+command_control = Command(67, "CMD_CONTROL", True, 0.5,
+                          [67, 67, 67, 0, 0, 0, 8, 0, 0, 0, 0, 0, 0, 0, 0],
+                          "dec")
+command_execute_menu = Command(69, "CMD_EXECUTE_MENU", False, 0, [18])
+command_reset = Command(114, "CMD_RESET")
+command_auto_pid = Command(35, "CMD_AUTO_PID", False, 0,
+                           ["01", "01", "ff", "00", "00", "00", "00", "00",
+                            "00", "00", "00", "00", "00", "00", "00", "00",
+                            "00", "00", "00"])
 
-CMD_READ_PARAMS = {}
-CMD_READ_PARAMS['id'] = 82
-CMD_READ_PARAMS['data'] = ["01"]
-CMD_READ_PARAMS['wait_response'] = True
-CMD_READ_PARAMS['wait_response_timeout'] = 0.5
-CMD_READ_PARAMS['data_format'] = "hex"
-
-CMD_BEEP_SOUND = {}
-CMD_BEEP_SOUND['id'] = 89
-CMD_BEEP_SOUND['data'] = [ "80", "00", "7D", "00", "00", "00", "00", "00", "00", "00", "00", "00", "B8", "0B"]
-CMD_BEEP_SOUND['data_format'] = "hex"
-
-CMD_CONTROL = {}
-CMD_CONTROL['id'] = 67
-# CMD_CONTROL['data'] = [ "01", "00", "d8", "00", "48", "00", "00", "00", "00", "00", "00", "00", "00" ]
-# CMD_CONTROL['data'] = [ 67,67,67, 0,2,0,2, 0,2,0,2, 0,2,0,2 ]
-CMD_CONTROL['data'] = [ 67,67,67, 0,0,0,8, 0,0,0,0, 0,0,0,0, ]
-CMD_CONTROL['data_format'] = "dec"
-CMD_CONTROL['wait_response'] = True
-CMD_CONTROL['wait_response_timeout'] = 0.5
-
-
-CMD_EXECUTE_MENU = {}
-CMD_EXECUTE_MENU['id'] = 69
-CMD_EXECUTE_MENU['data'] = [18]
-
-CMD_RESET = {}
-CMD_RESET['id'] = 114
-
-CMD_AUTO_PID = {}
-CMD_AUTO_PID['id'] = 35
-CMD_AUTO_PID['data'] = ["01", "01", "ff", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00", "00"]
-CMD_AUTO_PID['data_format'] = "hex"
-
-# stabilisce la connessione: tenta di riconoscere la porta usb alla quale
-# è connesso (fino a un massimo di 100)
+# tries to connect to device, scanning available usb ports (up to 100)
 usb = 0
 connected = 0
 while usb < 100 and usb >= 0:
     try:
-        ser = serial.Serial('/dev/ttyUSB'+str(usb))  # open serial port
+        ser = serial.serial('/dev/ttyUSB'+str(usb))  # opens serial port
         usb = -1
         connected = 1
     except:
         usb += 1
-
 
 if connected == 0:
     print "Device not connected or not available!"
     print "(are you running script as superser?)"
     print
     sys.exit()
+else:
+    ser.baudrate = 115200
+    print "Connected on: %s" % ser.name
+    print "Device ready to work!"
 
-print "Connesso su: "+str(ser.name)
-ser.baudrate = 115200
+# sends sample commands...
+send_command(command_motors_on)
+time.sleep(2)
+send_command(command_control)
+time.sleep(2)
 
-send_command(CMD_MOTORS_ON)
-time.sleep(1)
-# send_command(CMD_CONTROL)
-send_command(CMD_RESET)
-time.sleep(5)
-
-print "Device ready to work!"
 print ""
