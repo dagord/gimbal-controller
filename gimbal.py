@@ -21,7 +21,7 @@
 #  MA 02110-1301, USA.
 #
 # WARNING:
-# the script must be execute as superuser in order to access USB port!
+# the script must be executed as superuser in order to access USB ports!
 
 import serial
 import time
