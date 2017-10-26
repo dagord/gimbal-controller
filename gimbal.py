@@ -29,6 +29,9 @@ import array
 import sys
 
 
+debug = True  # enabling debug means no data is actually exchanged with Gimbal
+
+
 def to_hex(text_string):
     return str(''.join(map(lambda c:'\\x%02x'%c, map(ord, text_string))))
 
@@ -152,6 +155,153 @@ class Command(object):
         self.data = data
         self.data_format = data_format
 
+    def parse_results(self):
+        results = {}
+
+        if not debug:
+            ser.read()
+
+            command_id = ser.read().encode("hex")
+            results['command_id'] = int(command_id, 16)
+
+            data_size = ser.read().encode("hex")
+            results['data_size'] = data_size
+            data_size_converted = int(data_size, 16)
+
+            data = ser.read(data_size_converted)
+            results['data'] = data
+
+            body_checksum = ser.read().encode("hex")
+            results['body_checksum'] = body_checksum
+
+            decoded_data = array.array("b", data)
+            results['decoded_data'] = decoded_data
+
+            return results
+
+        else:
+            results['error'] = "Results not available in debug mode"
+            return results
+
+    def execute(self):
+        beginning_hex = '\x3E'
+        command_id_hex = chr(self.id)
+
+        # show command id
+        print "Command id: %s" % self.id
+
+        if not debug:
+            # send beginning characher
+            ser.write(beginning_hex)
+            # send command id
+            ser.write(chr(self.id))
+
+        # check if command has data
+        if self.data:
+            # calculate and send data array length
+            data_length = len(self.data)
+            data_length_hex = chr(data_length)
+            if not debug:
+                ser.write(data_length_hex)
+
+            # calculate and send header checksum
+            header_checksum = self.id + data_length
+            header_checksum_hex = chr(header_checksum % 256)
+            if not debug:
+                ser.write(header_checksum_hex)
+
+            data_hex = ''
+            ii = 0
+            body_checksum = 0
+            # parse data array
+            while ii < data_length:
+
+                if self.data_format == "dec":
+                    absolute_value = self.data[ii]
+                    if (self.data[ii] < 0):
+                        self.data[ii] = 256 + self.data[ii]
+
+                    converted_parameter = chr(self.data[ii] % 256).encode("hex")
+
+                else:
+                    absolute_value = int(self.data[ii], 16)
+                    converted_parameter = self.data[ii]
+
+                data_hex += converted_parameter
+                # increases body checksum
+                body_checksum += int(absolute_value)
+                ii += 1
+
+            # send bytearray
+            print "Data: %s" % data_hex
+            if not debug:
+                ser.write(bytearray.fromhex(data_hex))
+            print "Total bytes: %s" % body_checksum
+            body_checksum_hex = chr(body_checksum % 256)
+
+        else:
+            data_length = 0
+            data = 0
+            data_hex = chr(data)
+            body_checksum_hex = data_hex
+            data_length_hex = chr(data_length)
+            if not debug:
+                ser.write(data_length_hex)
+            header_checksum = self.id + data_length
+            header_checksum_hex = chr(header_checksum % 256)
+            if not debug:
+                ser.write(header_checksum_hex)
+                ser.write(data_hex)
+            print "No data"
+
+        # send body checksum
+        if not debug:
+            ser.write(body_checksum_hex)
+
+        # print composed command on screen
+        command_to_send = (
+                    beginning_hex + command_id_hex + data_length_hex +
+                    header_checksum_hex + data_hex+body_checksum_hex
+                    )
+        print "String sent: %s" % command_to_send
+
+        if self.wait_response:
+            print "----------------------"
+            print "Waiting response..."
+            time.sleep(self.wait_response_timeout)
+            results = self.parse_results()
+            if 'error' not in results:
+                print "Command id: s%" % results['command_id']
+                print "Data s%" % results['decoded_data']
+            else:
+                print "Error: %s" % results['error']
+
+        print
+
+
+# tries to connect to device, scanning available usb ports (up to 100)
+usb = 0
+connected = False
+while usb < 100 and usb >= 0:
+    try:
+        ser = serial.serial('/dev/ttyUSB'+str(usb))  # opens serial port
+        usb = -1
+        connected = True
+    except:
+        usb += 1
+
+if not debug:
+    if connected:
+        print "Device not connected or not available!"
+        print "(are you running script as superuser?)"
+        print
+        sys.exit()
+    else:
+        ser.baudrate = 115200
+        print "Connected on: %s" % ser.name
+        print "Device ready to work!"
+
+# defining sample commands...
 command_motors_on = Command(77, "CMD_MOTORS_ON")
 command_motors_off = Command(109, "CMD_MOTORS_OFF")
 command_board_info = Command(109, "CMD_BOARD_INFO", True, 0.5)
@@ -169,31 +319,10 @@ command_auto_pid = Command(35, "CMD_AUTO_PID", False, 0,
                             "00", "00", "00", "00", "00", "00", "00", "00",
                             "00", "00", "00"])
 
-# tries to connect to device, scanning available usb ports (up to 100)
-usb = 0
-connected = 0
-while usb < 100 and usb >= 0:
-    try:
-        ser = serial.serial('/dev/ttyUSB'+str(usb))  # opens serial port
-        usb = -1
-        connected = 1
-    except:
-        usb += 1
-
-if connected == 0:
-    print "Device not connected or not available!"
-    print "(are you running script as superuser?)"
-    print
-    sys.exit()
-else:
-    ser.baudrate = 115200
-    print "Connected on: %s" % ser.name
-    print "Device ready to work!"
-
-# sends sample commands...
-send_command(command_motors_on)
+# sending sample commands...
+command_motors_on.execute()
 time.sleep(2)
-send_command(command_control)
+command_control.execute()
 time.sleep(2)
 
 print ""
