@@ -9,11 +9,11 @@ I already defined a set of default commands that you can use for testing; you mu
 Eg.
 ```
 my_command = Command(id, description, wait_reponse, wait_response_timeout, data, data_format)
-send_command(my_command)
+send_command.execute()
 ```
 where:  
 - id: command id, as specified in official documentation  
-- description: short custom description  
+- description: short custom description (should match the official documentation)  
 - wait_response: to be used when waiting for an answer from the Gimbal (boolean)  
 - wait_response_timeout: specify a timeout for the answer (used only if wait_response is True)
 - data: send optional parameters (in array format) according to the command to be executed
